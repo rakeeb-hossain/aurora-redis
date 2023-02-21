@@ -2670,6 +2670,10 @@ void initServer(void) {
     server.acl_info.user_auth_failures = 0;
     server.acl_info.invalid_channel_accesses = 0;
 
+	// <SLS>
+	setupSLS();
+	// </SLS>
+
     /* Create the timer callback, this is our way to process many background
      * operations incrementally, like clients timeout, eviction of unaccessed
      * expired keys and so forth. */
