@@ -223,6 +223,13 @@ endif
 # Include paths to dependencies
 FINAL_CFLAGS+= -I../deps/hiredis -I../deps/linenoise -I../deps/lua/src -I../deps/hdr_histogram -I../deps/fpconv
 
+# <SLS>
+SLS_PATH?=/root/aurora
+FINAL_CFLAGS+= -I$(SLS_PATH)/include
+FINAL_LDFLAGS+= -L$(SLS_PATH)/libsls
+FINAL_LIBS+= -lsls
+# </SLS>
+
 # Determine systemd support and/or build preference (defaulting to auto-detection)
 BUILD_WITH_SYSTEMD=no
 LIBSYSTEMD_LIBS=-lsystemd
@@ -347,7 +354,7 @@ all: $(REDIS_SERVER_NAME) $(REDIS_SENTINEL_NAME) $(REDIS_CLI_NAME) $(REDIS_BENCH
 	@echo ""
 
 Makefile.dep:
-	-$(REDIS_CC) -MM $(ALL_SOURCES) > Makefile.dep 2> /dev/null || true
+	-$(REDIS_CC) -I/root/aurora/include -MM $(ALL_SOURCES) > Makefile.dep 2> /dev/null || true
 
 ifeq (0, $(words $(findstring $(MAKECMDGOALS), $(NODEPS))))
 -include Makefile.dep

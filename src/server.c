@@ -68,6 +68,11 @@
 #include <sys/sysctl.h>
 #endif
 
+// <SLS>
+#include <unistd.h>
+#include <sls.h>
+// </SLS>
+
 /* Our shared "common" objects */
 
 struct sharedObjectsStruct shared;
@@ -2490,6 +2495,32 @@ void makeThreadKillable(void) {
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 }
+
+// <SLS>
+void setupSLS(void) {
+	const struct sls_attr attr = {
+		.attr_target = SLS_OSD,
+		.attr_mode = SLS_DELTA,
+		.attr_period = 0,
+		.attr_amplification = 1
+	};
+
+	if (sls_partadd(OID, attr, -1)) {
+		perror("sls_partadd()");
+		exit(42);
+	}
+
+	if (sls_attach(OID, getpid()) != 0) {
+		perror("sls_attach()");
+		exit(42);
+	}
+	
+	if (sls_checkpoint(OID, true) != 0) {
+		perror("sls_checkpoint()");
+		exit(42);
+	}
+}
+// </SLS>
 
 void initServer(void) {
     int j;

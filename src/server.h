@@ -3653,4 +3653,8 @@ int iAmMaster(void);
 #define STRINGIFY_(x) #x
 #define STRINGIFY(x) STRINGIFY_(x)
 
+// <SLS>
+#define OID 1
+// </SLS>
+
 #endif

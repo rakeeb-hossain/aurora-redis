@@ -47,6 +47,10 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 
+// <SLS>
+#include <sls.h>
+// </SLS>
+
 /* This macro is called when the internal RDB structure is corrupt */
 #define rdbReportCorruptRDB(...) rdbReportError(1, __LINE__,__VA_ARGS__)
 /* This macro is called when RDB read failed (possibly a short read) */
@@ -1517,6 +1521,12 @@ werr:
 }
 
 int rdbSaveBackground(int req, char *filename, rdbSaveInfo *rsi, int rdbflags) {
+	if (sls_checkpoint(OID, true) != 0) {
+		perror("sls_checkpoint()");
+		return C_ERR;
+	}
+	return C_OK;
+
     pid_t childpid;
 
     if (hasActiveChildProcess()) return C_ERR;
