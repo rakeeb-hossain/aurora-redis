@@ -4208,6 +4208,19 @@ int prepareForShutdown(int flags) {
     if (server.loading || server.sentinel_mode)
         flags = (flags & ~SHUTDOWN_SAVE) | SHUTDOWN_NOSAVE;
 
+	// <SLS>
+	// Disable shutdown checkpoint
+	flags = (flags & ~SHUTDOWN_SAVE) | SHUTDOWN_NOSAVE;
+
+	// Delete partdel
+	/*
+	if (sls_partdel(OID) != 0) {
+		perror("sls_pardel()");
+		exit(42);
+	}
+	*/
+	// </SLS>
+
     server.shutdown_flags = flags;
 
     serverLog(LL_NOTICE,"User requested shutdown...");

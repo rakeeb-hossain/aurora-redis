@@ -1441,8 +1441,23 @@ werr: /* Write error. */
     return C_ERR;
 }
 
+int rdbSaveSLS(int bg) {
+	if (sls_checkpoint(OID, true) != 0) {
+		perror("sls_checkpoint()");
+		return C_ERR;
+	}
+	// Reset saveparams so we don't checkpoint immediately again after
+	// in case where RDB is triggered by too many writes
+	server.dirty = 0;
+	server.lastsave = time(NULL);
+	server.lastbgsave_status = C_OK;
+	return C_OK;
+}
+
 /* Save the DB on disk. Return C_ERR on error, C_OK on success. */
 int rdbSave(int req, char *filename, rdbSaveInfo *rsi, int rdbflags) {
+	return rdbSaveSLS(false);
+
     char tmpfile[256];
     char cwd[MAXPATHLEN]; /* Current working dir path for error messages. */
     FILE *fp = NULL;
@@ -1521,11 +1536,7 @@ werr:
 }
 
 int rdbSaveBackground(int req, char *filename, rdbSaveInfo *rsi, int rdbflags) {
-	if (sls_checkpoint(OID, true) != 0) {
-		perror("sls_checkpoint()");
-		return C_ERR;
-	}
-	return C_OK;
+	return rdbSaveSLS(true);
 
     pid_t childpid;
 
