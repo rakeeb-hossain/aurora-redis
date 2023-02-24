@@ -41,6 +41,40 @@
 #include <sys/wait.h>
 #include <sys/param.h>
 
+// <SLS>
+#include <sls.h>
+
+const char * const DEFAULT_WAL_STRIPE = "/dev/wal";
+const size_t WAL_SIZE = 64ULL << 3;
+size_t ssd_offset_ = 0;
+
+void initWAL(void) {
+	server.wal_fd = open(DEFAULT_WAL_STRIPE, O_RDWR | O_DIRECT);
+	if (server.wal_fd < 0) {
+		perror("open(wal_fd)");
+		exit(42);
+	}
+}
+
+void writeWAL(const char *data, size_t len) {
+	len = (len + server.page_size - 1) & ~(server.page_size - 1);
+	if (ssd_offset_ + len > WAL_SIZE) {
+        serverLog(LL_DEBUG, "Checkpointing AOF WAL");
+		if (sls_checkpoint(OID, true) != 0) {
+			perror("sls_checkpoint()");
+			exit(42);		
+		}
+		ssd_offset_ = 0;
+	} else {
+		if (pwrite(server.wal_fd, data, len, ssd_offset_) != (ssize_t)len) {
+			perror("pwrite(wal_fd)");
+			exit(42);
+		}
+	}
+}
+
+// </SLS>
+
 void freeClientArgv(client *c);
 off_t getAppendOnlyFileSize(sds filename, int *status);
 off_t getBaseAndIncrAppendOnlyFilesSize(aofManifest *am, int *status);
@@ -711,6 +745,10 @@ void aofDelTempIncrAofFile() {
  * If any of the above steps fails, the redis process will exit.
  */
 void aofOpenIfNeededOnServerStart(void) {
+	// <SLS>
+	initWAL();
+	return;
+	// </SLS>
     if (server.aof_state != AOF_ON) {
         return;
     }
@@ -1058,6 +1096,11 @@ ssize_t aofWrite(int fd, const char *buf, size_t len) {
  * fsync. */
 #define AOF_WRITE_LOG_ERROR_RATE 30 /* Seconds between errors logging. */
 void flushAppendOnlyFile(int force) {
+	// <SLS>
+	serverLog(LL_WARNING, "AOF writing");
+	writeWAL(server.aof_buf, sdslen(server.aof_buf));
+	return;
+	// </SLS>
     ssize_t nwritten;
     int sync_in_progress = 0;
     mstime_t latency;
@@ -2330,6 +2373,9 @@ werr:
  * and ZADD. However at max AOF_REWRITE_ITEMS_PER_CMD items per time
  * are inserted using a single command. */
 int rewriteAppendOnlyFile(char *filename) {
+	// <SLS>
+	return C_OK;
+	// </SLS>
     rio aof;
     FILE *fp = NULL;
     char tmpfile[256];
@@ -2410,6 +2456,9 @@ werr:
  *    4e) Delete the history files use bio
  */
 int rewriteAppendOnlyFileBackground(void) {
+	// <SLS>
+	return C_OK;
+	// </SLS>
     pid_t childpid;
 
     if (hasActiveChildProcess()) return C_ERR;

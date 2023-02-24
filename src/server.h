@@ -1964,6 +1964,10 @@ struct redisServer {
     int reply_buffer_resizing_enabled; /* Is reply buffer resizing enabled (1 by default) */
     /* Local environment */
     char *locale_collate;
+
+	// <SLS>
+	int wal_fd;
+	// </SLS>
 };
 
 #define MAX_KEYS_BUFFER 256
