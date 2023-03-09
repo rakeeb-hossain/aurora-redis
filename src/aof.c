@@ -43,15 +43,17 @@
 
 // <SLS>
 #include <sls.h>
+#include <slos.h>
+#include <slsfs.h>
 
-const char * const DEFAULT_WAL_STRIPE = "/dev/wal";
-const size_t WAL_SIZE = 64ULL << 3;
+const size_t WAL_SIZE = 1024 * 1024 * 1024;
 size_t ssd_offset_ = 0;
 
 void initWAL(void) {
-	server.wal_fd = open(DEFAULT_WAL_STRIPE, O_RDWR | O_DIRECT);
+	server.wal_fd = slsfs_create_wal("aof_wal", O_RDWR, 0660, WAL_SIZE);
 	if (server.wal_fd < 0) {
-		perror("open(wal_fd)");
+		serverLog(LL_WARNING, "[SLS] slsfs_create_wal failed");
+		perror("slsfs_create_wal");
 		exit(42);
 	}
 }
@@ -60,9 +62,8 @@ void writeWAL(const char *data, size_t len) {
 	int error;
 	ssize_t ret;
 
-	len = (len + server.page_size - 1) & ~(server.page_size - 1);
 	if (ssd_offset_ + len > WAL_SIZE) {
-        serverLog(LL_DEBUG, "Checkpointing AOF WAL");
+        	serverLog(LL_DEBUG, "Checkpointing AOF WAL");
 		error = sls_checkpoint(server.sls_oid , true);
 		if (error != 0) {
 			serverLog(LL_WARNING, "[SLS] sls_checkpoint failed with %d", error);
