@@ -2498,25 +2498,31 @@ void makeThreadKillable(void) {
 
 // <SLS>
 void setupSLS(void) {
+	long long oid = server.sls_oid;
+	int error;
 	const struct sls_attr attr = {
 		.attr_target = SLS_OSD,
 		.attr_mode = SLS_DELTA,
 		.attr_period = 0,
+		.attr_flags = SLSATTR_IGNUNLINKED,
 		.attr_amplification = 1
 	};
 
-	if (sls_partadd(OID, attr, -1)) {
-		perror("sls_partadd()");
+	error = sls_partadd(oid, attr, -1);
+	if (error != 0) {
+		serverLog(LL_WARNING, "[SLS] sls_partadd failed with %d", error);
 		exit(42);
 	}
 
-	if (sls_attach(OID, getpid()) != 0) {
-		perror("sls_attach()");
+	error = sls_attach(oid, getpid());
+	if (error != 0) {
+		serverLog(LL_WARNING, "[SLS] sls_attach failed with %d", error);
 		exit(42);
 	}
 	
-	if (sls_checkpoint(OID, true) != 0) {
-		perror("sls_checkpoint()");
+	error = sls_checkpoint(oid, true);
+	if (error != 0) {
+		serverLog(LL_WARNING, "[SLS] sls_checkpoint failed with %d", error);
 		exit(42);
 	}
 }
@@ -2669,10 +2675,6 @@ void initServer(void) {
     server.acl_info.invalid_key_accesses  = 0;
     server.acl_info.user_auth_failures = 0;
     server.acl_info.invalid_channel_accesses = 0;
-
-	// <SLS>
-	setupSLS();
-	// </SLS>
 
     /* Create the timer callback, this is our way to process many background
      * operations incrementally, like clients timeout, eviction of unaccessed
@@ -4197,6 +4199,7 @@ void closeListeningSockets(int unlink_unix_socket) {
  *
  * On success, this function returns C_OK and then it's OK to call exit(0). */
 int prepareForShutdown(int flags) {
+    int error;
     if (isShutdownInitiated()) return C_ERR;
 
     /* When SHUTDOWN is called while the server is loading a dataset in
@@ -4212,13 +4215,9 @@ int prepareForShutdown(int flags) {
 	// Disable shutdown checkpoint
 	flags = (flags & ~SHUTDOWN_SAVE) | SHUTDOWN_NOSAVE;
 
-	// Delete partdel
-	/*
-	if (sls_partdel(OID) != 0) {
-		perror("sls_pardel()");
-		exit(42);
-	}
-	*/
+	error = sls_partdel(server.sls_oid);
+	if (error != 0)
+		serverLog(LL_WARNING, "[SLS] sls_partdel failed with %d", error);
 	// </SLS>
 
     server.shutdown_flags = flags;
@@ -4371,7 +4370,7 @@ int finishShutdown(void) {
         /* Append only file: flush buffers and fsync() the AOF at exit */
         serverLog(LL_NOTICE,"Calling fsync() on the AOF file.");
         flushAppendOnlyFile(1);
-        if (false && redis_fsync(server.aof_fd) == -1) {
+        if (redis_fsync(server.aof_fd) == -1) {
             serverLog(LL_WARNING,"Fail to fsync the AOF file: %s.",
                                  strerror(errno));
         }
@@ -7313,6 +7312,10 @@ int main(int argc, char **argv) {
     redisSetCpuAffinity(server.server_cpulist);
     setOOMScoreAdj(-1);
 
+    // <SLS>
+    setupSLS();
+    // </SLS>
+    
     aeMain(server.el);
     aeDeleteEventLoop(server.el);
     return 0;
