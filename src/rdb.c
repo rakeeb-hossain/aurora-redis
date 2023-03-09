@@ -1442,8 +1442,10 @@ werr: /* Write error. */
 }
 
 int rdbSaveSLS(int bg) {
-	if (sls_checkpoint(OID, true) != 0) {
-		perror("sls_checkpoint()");
+	int error;
+	error = sls_checkpoint(server.sls_oid, true);
+	if (error != 0) {
+		serverLog(LL_WARNING, "[SLS] sls_checkpoint failed with %d", error);
 		return C_ERR;
 	}
 	// Reset saveparams so we don't checkpoint immediately again after

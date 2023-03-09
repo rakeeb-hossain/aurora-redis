@@ -1965,9 +1965,10 @@ struct redisServer {
     /* Local environment */
     char *locale_collate;
 
-	// <SLS>
-	int wal_fd;
-	// </SLS>
+    // <SLS>
+    int wal_fd;
+    long long sls_oid;
+    // </SLS>
 };
 
 #define MAX_KEYS_BUFFER 256
@@ -3656,9 +3657,5 @@ int iAmMaster(void);
 
 #define STRINGIFY_(x) #x
 #define STRINGIFY(x) STRINGIFY_(x)
-
-// <SLS>
-#define OID 1
-// </SLS>
 
 #endif

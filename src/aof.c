@@ -57,16 +57,27 @@ void initWAL(void) {
 }
 
 void writeWAL(const char *data, size_t len) {
+	int error;
+	ssize_t ret;
+
 	len = (len + server.page_size - 1) & ~(server.page_size - 1);
 	if (ssd_offset_ + len > WAL_SIZE) {
         serverLog(LL_DEBUG, "Checkpointing AOF WAL");
-		if (sls_checkpoint(OID, true) != 0) {
-			perror("sls_checkpoint()");
+		error = sls_checkpoint(server.sls_oid , true);
+		if (error != 0) {
+			serverLog(LL_WARNING, "[SLS] sls_checkpoint failed with %d", error);
 			exit(42);		
 		}
 		ssd_offset_ = 0;
 	} else {
-		if (pwrite(server.wal_fd, data, len, ssd_offset_) != (ssize_t)len) {
+		ret = pwrite(server.wal_fd, data, len, ssd_offset_);
+		if (ret == -1) {
+			serverLog(LL_WARNING, "[SLS] pwrite failed");
+			perror("pwrite(wal_fd)");
+			exit(42);
+		}
+		if (ret != len) {
+			serverLog(LL_WARNING, "[SLS] pwrite wrote %ld bytes, expected %ld", ret, len);
 			perror("pwrite(wal_fd)");
 			exit(42);
 		}
