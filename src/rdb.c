@@ -1441,138 +1441,15 @@ werr: /* Write error. */
     return C_ERR;
 }
 
-int rdbSaveSLS(int bg) {
-	int error;
-	error = sls_checkpoint(server.sls_oid, true);
-	if (error != 0) {
-		serverLog(LL_WARNING, "[SLS] sls_checkpoint failed with %d", error);
-		return C_ERR;
-	}
-	// Reset saveparams so we don't checkpoint immediately again after
-	// in case where RDB is triggered by too many writes
-	server.dirty = 0;
-	server.lastsave = time(NULL);
-	server.lastbgsave_status = C_OK;
-	return C_OK;
-}
-
 /* Save the DB on disk. Return C_ERR on error, C_OK on success. */
 int rdbSave(int req, char *filename, rdbSaveInfo *rsi, int rdbflags) {
-	return rdbSaveSLS(false);
-
-    char tmpfile[256];
-    char cwd[MAXPATHLEN]; /* Current working dir path for error messages. */
-    FILE *fp = NULL;
-    rio rdb;
-    int error = 0;
-    char *err_op;    /* For a detailed log */
-
-    snprintf(tmpfile,256,"temp-%d.rdb", (int) getpid());
-    fp = fopen(tmpfile,"w");
-    if (!fp) {
-        char *str_err = strerror(errno);
-        char *cwdp = getcwd(cwd,MAXPATHLEN);
-        serverLog(LL_WARNING,
-            "Failed opening the temp RDB file %s (in server root dir %s) "
-            "for saving: %s",
-            tmpfile,
-            cwdp ? cwdp : "unknown",
-            str_err);
-        return C_ERR;
-    }
-
-    rioInitWithFile(&rdb,fp);
-    startSaving(RDBFLAGS_NONE);
-
-    if (server.rdb_save_incremental_fsync) {
-        rioSetAutoSync(&rdb,REDIS_AUTOSYNC_BYTES);
-        if (!(rdbflags & RDBFLAGS_KEEP_CACHE)) rioSetReclaimCache(&rdb,1);
-    }
-
-    if (rdbSaveRio(req,&rdb,&error,rdbflags,rsi) == C_ERR) {
-        errno = error;
-        err_op = "rdbSaveRio";
-        goto werr;
-    }
-
-    /* Make sure data will not remain on the OS's output buffers */
-    if (fflush(fp)) { err_op = "fflush"; goto werr; }
-    if (fsync(fileno(fp))) { err_op = "fsync"; goto werr; }
-    if (!(rdbflags & RDBFLAGS_KEEP_CACHE) && reclaimFilePageCache(fileno(fp), 0, 0) == -1) {
-        serverLog(LL_NOTICE,"Unable to reclaim cache after saving RDB: %s", strerror(errno));
-    }
-    if (fclose(fp)) { fp = NULL; err_op = "fclose"; goto werr; }
-    fp = NULL;
-    
-    /* Use RENAME to make sure the DB file is changed atomically only
-     * if the generate DB file is ok. */
-    if (rename(tmpfile,filename) == -1) {
-        char *str_err = strerror(errno);
-        char *cwdp = getcwd(cwd,MAXPATHLEN);
-        serverLog(LL_WARNING,
-            "Error moving temp DB file %s on the final "
-            "destination %s (in server root dir %s): %s",
-            tmpfile,
-            filename,
-            cwdp ? cwdp : "unknown",
-            str_err);
-        unlink(tmpfile);
-        stopSaving(0);
-        return C_ERR;
-    }
-    if (fsyncFileDir(filename) == -1) { err_op = "fsyncFileDir"; goto werr; }
-
-    serverLog(LL_NOTICE,"DB saved on disk");
-    server.dirty = 0;
-    server.lastsave = time(NULL);
-    server.lastbgsave_status = C_OK;
-    stopSaving(1);
-    return C_OK;
-
-werr:
-    serverLog(LL_WARNING,"Write error saving DB on disk(%s): %s", err_op, strerror(errno));
-    if (fp) fclose(fp);
-    unlink(tmpfile);
-    stopSaving(0);
-    return C_ERR;
+    serverLog(LL_WARNING, "[SLS] Inaccessible rdbSave function called in SLS mode, exiting");
+    exit(0);
 }
 
 int rdbSaveBackground(int req, char *filename, rdbSaveInfo *rsi, int rdbflags) {
-	return rdbSaveSLS(true);
-
-    pid_t childpid;
-
-    if (hasActiveChildProcess()) return C_ERR;
-    server.stat_rdb_saves++;
-
-    server.dirty_before_bgsave = server.dirty;
-    server.lastbgsave_try = time(NULL);
-
-    if ((childpid = redisFork(CHILD_TYPE_RDB)) == 0) {
-        int retval;
-
-        /* Child */
-        redisSetProcTitle("redis-rdb-bgsave");
-        redisSetCpuAffinity(server.bgsave_cpulist);
-        retval = rdbSave(req, filename,rsi,rdbflags);
-        if (retval == C_OK) {
-            sendChildCowInfo(CHILD_INFO_TYPE_RDB_COW_SIZE, "RDB");
-        }
-        exitFromChild((retval == C_OK) ? 0 : 1);
-    } else {
-        /* Parent */
-        if (childpid == -1) {
-            server.lastbgsave_status = C_ERR;
-            serverLog(LL_WARNING,"Can't save in background: fork: %s",
-                strerror(errno));
-            return C_ERR;
-        }
-        serverLog(LL_NOTICE,"Background saving started by pid %ld",(long) childpid);
-        server.rdb_save_time_start = time(NULL);
-        server.rdb_child_type = RDB_CHILD_TYPE_DISK;
-        return C_OK;
-    }
-    return C_OK; /* unreached */
+    serverLog(LL_WARNING, "[SLS] Inaccessible rdbSaveBackground function in SLS mode, exiting");
+    exit(0);
 }
 
 /* Note that we may call this function in signal handle 'sigShutdownHandler',
@@ -3602,57 +3479,12 @@ int rdbSaveToSlavesSockets(int req, rdbSaveInfo *rsi) {
 }
 
 void saveCommand(client *c) {
-    if (server.child_type == CHILD_TYPE_RDB) {
-        addReplyError(c,"Background save already in progress");
-        return;
-    }
-
-    server.stat_rdb_saves++;
-
-    rdbSaveInfo rsi, *rsiptr;
-    rsiptr = rdbPopulateSaveInfo(&rsi);
-    if (rdbSave(SLAVE_REQ_NONE,server.rdb_filename,rsiptr,RDBFLAGS_NONE) == C_OK) {
-        addReply(c,shared.ok);
-    } else {
-        addReplyErrorObject(c,shared.err);
-    }
+    serverLog(LL_VERBOSE, "[SLS] SAVE command incompatble with SLS mode");
 }
 
 /* BGSAVE [SCHEDULE] */
 void bgsaveCommand(client *c) {
-    int schedule = 0;
-
-    /* The SCHEDULE option changes the behavior of BGSAVE when an AOF rewrite
-     * is in progress. Instead of returning an error a BGSAVE gets scheduled. */
-    if (c->argc > 1) {
-        if (c->argc == 2 && !strcasecmp(c->argv[1]->ptr,"schedule")) {
-            schedule = 1;
-        } else {
-            addReplyErrorObject(c,shared.syntaxerr);
-            return;
-        }
-    }
-
-    rdbSaveInfo rsi, *rsiptr;
-    rsiptr = rdbPopulateSaveInfo(&rsi);
-
-    if (server.child_type == CHILD_TYPE_RDB) {
-        addReplyError(c,"Background save already in progress");
-    } else if (hasActiveChildProcess() || server.in_exec) {
-        if (schedule || server.in_exec) {
-            server.rdb_bgsave_scheduled = 1;
-            addReplyStatus(c,"Background saving scheduled");
-        } else {
-            addReplyError(c,
-            "Another child process is active (AOF?): can't BGSAVE right now. "
-            "Use BGSAVE SCHEDULE in order to schedule a BGSAVE whenever "
-            "possible.");
-        }
-    } else if (rdbSaveBackground(SLAVE_REQ_NONE,server.rdb_filename,rsiptr,RDBFLAGS_NONE) == C_OK) {
-        addReplyStatus(c,"Background saving started");
-    } else {
-        addReplyErrorObject(c,shared.err);
-    }
+    serverLog(LL_VERBOSE, "[SLS] BGSAVE command incompatble with SLS mode");
 }
 
 /* Populate the rdbSaveInfo structure used to persist the replication
